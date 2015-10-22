@@ -8,6 +8,6 @@ module.exports = {
     maxLimit: 10000,
 
     //define the connection information for the mongo database
-    mongoConnect: 'mongodb://localhost:27017/commands',
+    mongoConnect: 'mongodb://localhost:27017/commands'
 
 };

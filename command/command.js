@@ -163,6 +163,7 @@ exports.handle = function(path, indexes, transform) {
         }),
         indexes: indexes,                   //the index configuration instructions
         keys: keys,                         //a list of configuration keys
+        subscriptions: {},                  //a map of subscriptions
         transform: transform                //the transform object function
     };
 
@@ -201,6 +202,101 @@ exports.handle = function(path, indexes, transform) {
  *          The name of the property to store the write to database timestamp on.
  */
 exports.query = function(path, filter, options) {
+    return new Promise(function(resolve, reject) {
+        var result = {
+            code: 0,
+            contentType: 'text/plain',
+            content: new stream.Readable(),
+            limit: globalConfig.defaultLimit,
+            position: null,
+            recordsCount: 0
+        };
+
+        function respond(code, message) {
+            result.code = code;
+            if (message) result.content.push(message);
+            result.content.push(null);
+            resolve(result);
+        }
+
+        try {
+            if (store.hasOwnProperty(path)) {
+                store[path].collection
+                    .then(function(collection) {
+                        var query = buildQuery(path, filter, options);
+                        var cursor = collection.find(query);
+                        return cursor.count()
+                            .then(function(count) {
+                                return {
+                                    count: count,
+                                    cursor: cursor
+                                };
+                            });
+                    })
+                    .then(function(data) {
+                        var cursor;
+                        var start;
+                        var tsProperty;
+
+                        //store the records count for this query - the total number of records that match the query before limiting
+                        result.recordsCount = data.count;
+
+                        //determine the skip value
+                        start = data.count - result.limit;
+                        if (options.hasOwnProperty('position') && !isNaN(options.position)) start = parseInt(options.position);
+                        result.position = start;
+
+                        //if the current position falls out of bounds then return an empty response
+                        if (result.position < 1 || result.position > data.count) {
+                            result.contentType = 'application/json';
+                            respond(200);
+                            return;
+                        }
+
+                        //determine whether to return the timestamp
+                        if (options.hasOwnProperty('timestamp')) {
+                            tsProperty = 'timestamp';
+                            if (options.timestamp) tsProperty = options.timestamp;
+                        }
+
+                        //limit the cursor
+                        cursor = data.cursor.skip(start - 1);
+
+                        //set status and content type
+                        result.code = 200;
+                        result.contentType = 'application/json';
+
+                        //set the content
+                        result.content = cursor.stream({
+                            transform: function(item) {
+                                var data = item.__data;
+                                if (tsProperty) data[tsProperty] = item.__timestamp;
+                                return data;
+                            }
+                        });
+
+                        //resolve the result
+                        resolve(result);
+                    })
+                    .catch(function(e) {
+                        console.error(e.stack);
+                        respond(500, 'Internal server error');
+                    });
+
+            } else {
+                respond(404, 'Not found');
+            }
+        } catch (e) {
+            console.error(e.stack);
+            respond(500, 'Internal server error');
+        }
+    });
+};
+
+
+
+
+exports.query2 = function(path, filter, options) {
     return new Promise(function(resolve, reject) {
         var result = {
             code: 0,
@@ -301,7 +397,60 @@ exports.query = function(path, filter, options) {
 };
 
 exports.subscribe = function(path, query, listener) {
+    return new Promise(function(resolve, reject) {
+        var result = {
+            code: 0,
+            contentType: 'text/plain',
+            content: new stream.Readable()
+        };
 
+        function respond(code, message) {
+            result.code = code;
+            result.content.push(message);
+            result.content.push(null);
+            resolve(result);
+        }
+
+        try {
+            if (store.hasOwnProperty(path)) {
+                //TODO: figure out how to generate a unique key for the subscription
+                //the unique key must be used to unsubscribe
+            } else {
+                respond(404, 'Not found');
+            }
+        } catch (e) {
+            console.error(e.stack);
+            respond(500, 'Internal server error');
+        }
+    });
+};
+
+exports.unsubscribe = function(path, query, listener) {
+    return new Promise(function(resolve, reject) {
+        var result = {
+            code: 0,
+            contentType: 'text/plain',
+            content: new stream.Readable()
+        };
+
+        function respond(code, message) {
+            result.code = code;
+            result.content.push(message);
+            result.content.push(null);
+            resolve(result);
+        }
+
+        try {
+            if (store.hasOwnProperty(path)) {
+
+            } else {
+                respond(404, 'Not found');
+            }
+        } catch (e) {
+            console.error(e.stack);
+            respond(500, 'Internal server error');
+        }
+    });
 };
 
 function buildQuery(path, filter, options) {
