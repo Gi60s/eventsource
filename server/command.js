@@ -247,7 +247,7 @@ exports.query = function(path, filter, options) {
                         if (result.limit > globalConfig.maxLimit) result.limit = globalConfig.maxLimit;
 
                         //determine the skip value
-                        start = 1;
+                        start = data.count - result.limit;
                         if (options.hasOwnProperty('position') && !isNaN(options.position)) start = parseInt(options.position);
                         result.position = start;
 
